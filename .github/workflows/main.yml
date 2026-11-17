@@ -4,7 +4,8 @@ name: Build Armand CCTV APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
+    branches:
+      - main
 
 jobs:
   build:
@@ -13,17 +14,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Detect project folder
-        run: |
-          if [ -f settings.gradle ]; then
-            echo "PROJECT_DIR=." >> $GITHUB_ENV
-          elif [ -f ArmandCCTV/settings.gradle ]; then
-            echo "PROJECT_DIR=ArmandCCTV" >> $GITHUB_ENV
-          else
-            echo "Android project not found"
-            exit 1
-          fi
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -34,20 +24,29 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install SDK
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+      - name: Extract Android project
+        run: |
+          unzip -q ArmandCCTV_Project_GitHub_Build-1.zip -d android-src
 
       - name: Build APK
-        run: gradle --no-daemon assembleDebug
-        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          WRAPPER=$(find android-src -name gradlew -type f | head -n 1)
+          if [ -z "$WRAPPER" ]; then
+            echo "Gradle wrapper not found in ZIP"
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$WRAPPER")
+          cd "$PROJECT_DIR"
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Collect APK
+        run: |
+          mkdir -p apk-output
+          find android-src -path '*/build/outputs/apk/debug/*.apk' -exec cp {} apk-output/ \;
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ArmandCCTV-APK
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          name: Armand-CCTV-APK
+          path: apk-output/*.apk
